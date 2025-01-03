@@ -1,0 +1,91 @@
+version: '3.4'
+services:
+  mysql:
+    image: mysql:5.7.32
+    env_file:
+      - ./env/mysql.env
+    ports:
+      - $MYSQL_PORT:3306
+    volumes:
+      - mysql-data:/var/lib/mysql/
+    user: $UID:$UID
+    networks:
+      - laravel
+  adminer:
+    image: adminer:4.7.8-standalone
+    env_file:
+      - ./env/adminer.env
+    ports:
+      - $ADMINER_PORT:8080
+    networks:
+      - laravel
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - $MAILHOG_SMTP_PORT:1025
+      - $MAILHOG_UI_PORT:8025
+    networks:
+      - laravel
+  app:
+    image: $APP_IMAGE
+    build:
+      context: .
+      dockerfile: ./Dockerfiles/app.Dockerfile
+      args:
+        UID: $UID
+    volumes:
+      - $APP_VOLUMES_SRC:/var/www/html/
+      - app-user-home:/home/www-data/
+    env_file:
+      - ./env/app.env
+    depends_on:
+      - redis
+      - mysql
+      - elasticsearch  # Ensure app waits for Elasticsearch
+    networks:
+      - laravel
+  static:
+    image: nginx:1.19.6-alpine
+    volumes:
+      - static-public:/usr/share/nginx/html/
+    networks:
+      - laravel
+  proxy:
+    image: $PROXY_IMAGE
+    build:
+      context: .
+      dockerfile: ./Dockerfiles/proxy.Dockerfile
+    ports:
+      - $PROXY_PORT:80
+    env_file:
+      - ./env/proxy.env
+    networks:
+      - laravel
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - laravel
+  elasticsearch:
+    container_name: local-elasticsearch
+    image: elasticsearch:5.6.16
+    environment:
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - laravel
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    # user: $UID:$UID
+    restart: always  # Ensure it restarts on failure
+networks:
+  laravel:
+    driver: bridge
+volumes:
+  mysql-data:
+  app-user-home:
+  static-public:
+  elasticsearch-data:
